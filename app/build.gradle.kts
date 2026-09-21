@@ -1,46 +1,58 @@
-# DC TRACKS Android
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.kapt")
+}
 
-A working Android app starter for tracking outdoor and activity sessions.
+android {
+    namespace = "com.example.dctracks"
+    compileSdk = 35
 
-## Features
+    defaultConfig {
+        applicationId = "com.example.dctracks"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }
 
-- dashboard summary cards
-- searchable track list
-- filter tabs by status
-- open detail screen
-- add, edit, and delete track actions
-- polished Material 3 Compose UI
+    buildFeatures {
+        compose = true
+    }
 
-## Open and run
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
-1. Open this repository in Android Studio.
-2. Let Gradle sync and install any missing Android SDK components.
-3. Choose an emulator or connected device.
-4. Click Run.
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
 
-## Current app flow
+dependencies {
+    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    implementation(composeBom)
+    androidTestImplementation(composeBom)
 
-- Home screen shows a list of tracks and summary cards.
-- Search filters results by title, type, or location.
-- Open a track to see detail information.
-- Add or edit a track through the form screen.
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
 
-## App purpose
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
 
-This app is designed to support activity tracking such as:
-- running
-- hiking
-- cycling
-- walking
-- fitness or route review tracking
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-## Recommended next step
-
-The next logical improvement is to add Room persistence so tracks remain saved even when the app restarts.
-
-## Main files
-
-- app/src/main/java/com/example/dctracks/MainActivity.kt
-- app/src/main/AndroidManifest.xml
-- app/build.gradle.kts
-
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+}

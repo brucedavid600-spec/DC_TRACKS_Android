@@ -1,5 +1,6 @@
 package com.example.dctracks
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -43,16 +44,21 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.dctracks.data.AppDatabase
+import com.example.dctracks.data.TrackRepository
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -68,73 +74,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun DCTracksApp() {
-    val tracks = remember {
-        mutableStateListOf(
-            Track(
-                id = "1",
-                title = "City Sprint",
-                type = "Running",
-                status = "In Progress",
-                notes = "Warm-up lap before the main route.",
-                distance = "3.4 mi",
-                pace = "7:12 /mi",
-                location = "Downtown Loop",
-                date = "Today"
-            ),
-            Track(
-                id = "2",
-                title = "Forest Loop",
-                type = "Hiking",
-                status = "Planned",
-                notes = "Trail review and scenic pass.",
-                distance = "5.1 mi",
-                pace = "24:36 /mi",
-                location = "North Ridge",
-                date = "Tomorrow"
-            ),
-            Track(
-                id = "3",
-                title = "Night Ride",
-                type = "Cycling",
-                status = "Completed",
-                notes = "Strong pace and steady cadence.",
-                distance = "12.7 mi",
-                pace = "16.5 mph",
-                location = "River Trail",
-                date = "Yesterday"
-            ),
-            Track(
-                id = "4",
-                title = "Harbor Walk",
-                type = "Walking",
-                status = "Completed",
-                notes = "Recovery walk after training.",
-                distance = "2.2 mi",
-                pace = "18:12 /mi",
-                location = "Harbor Promenade",
-                date = "2 days ago"
-            )
-        )
-    }
+    val context = LocalContext.current
+    val repository = remember { TrackRepository(AppDatabase.getInstance(context.applicationContext as Context).trackDao()) }
+    val scope = rememberCoroutineScope()
 
+    var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var activeScreen by remember { mutableStateOf<Screen>(Screen.Home) }
     var query by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(Filter.All) }
 
-    val filteredTracks = remember(tracks, query, selectedTab) {
-        tracks.filter { track ->
-            val matchesTab = when (selectedTab) {
-                Filter.All -> true
-                Filter.Planned -> track.status == "Planned"
-                Filter.InProgress -> track.status == "In Progress"
-                Filter.Completed -> track.status == "Completed"
-            }
-            val matchesQuery = query.isBlank() ||
-                track.title.contains(query, ignoreCase = true) ||
-                track.type.contains(query, ignoreCase = true) ||
-                track.location.contains(query, ignoreCase = true)
-            matchesTab && matchesQuery
+    LaunchedEffect(Unit) {
+        tracks = repository.getAllTracks()
+    }
+
+    val filteredTracks = tracks.filter { track ->
+        val matchesTab = when (selectedTab) {
+            Filter.All -> true
+            Filter.Planned -> track.status == "Planned"
+            Filter.InProgress -> track.status == "In Progress"
+            Filter.Completed -> track.status == "Completed"
         }
+        val matchesQuery = query.isBlank() ||
+            track.title.contains(query, ignoreCase = true) ||
+            track.type.contains(query, ignoreCase = true) ||
+            track.location.contains(query, ignoreCase = true)
+        matchesTab && matchesQuery
     }
 
     when (val screen = activeScreen) {
@@ -146,20 +110,23 @@ private fun DCTracksApp() {
             onTabChange = { selectedTab = it },
             onAddTrack = { activeScreen = Screen.Form(null) },
             onEditTrack = { track -> activeScreen = Screen.Form(track) },
-            onDeleteTrack = { track -> tracks.remove(track) },
+            onDeleteTrack = { track ->
+                scope.launch {
+                    repository.deleteTrack(track)
+                    tracks = repository.getAllTracks()
+                }
+            },
             onOpenTrack = { track -> activeScreen = Screen.Detail(track) }
         )
 
         is Screen.Form -> TrackFormScreen(
             initialTrack = screen.track,
             onSave = { savedTrack ->
-                if (screen.track == null) {
-                    tracks.add(savedTrack)
-                } else {
-                    val index = tracks.indexOfFirst { it.id == savedTrack.id }
-                    if (index >= 0) tracks[index] = savedTrack
+                scope.launch {
+                    repository.insertOrUpdate(savedTrack)
+                    tracks = repository.getAllTracks()
+                    activeScreen = Screen.Home
                 }
-                activeScreen = Screen.Home
             },
             onCancel = { activeScreen = Screen.Home }
         )
@@ -188,7 +155,7 @@ private fun HomeScreen(
     val completed = tracks.count { it.status == "Completed" }
     val planned = tracks.count { it.status == "Planned" }
 
-    Scaffold(
+    androidx.compose.material3.Scaffold(
         topBar = { TopAppBar(title = { Text("DC TRACKS") }) },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddTrack) {
@@ -223,7 +190,7 @@ private fun HomeScreen(
                     Text("No tracks match your search.")
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.foundation.lazy.LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(tracks, key = { it.id }) { track ->
                         TrackCard(
                             track = track,
@@ -558,4 +525,3 @@ private sealed class Screen {
     data class Form(val track: Track?) : Screen()
     data class Detail(val track: Track) : Screen()
 }
-
