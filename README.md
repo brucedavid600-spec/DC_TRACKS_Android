@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -41,7 +43,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,6 +64,7 @@ private fun AudioConverterApp() {
     var outputFormat by remember { mutableStateOf("mp3") }
     var status by remember { mutableStateOf("Select an audio file to convert.") }
     var convertedFilePath by remember { mutableStateOf<String?>(null) }
+    var isBusy by remember { mutableStateOf(false) }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedUri = uri
@@ -90,9 +92,9 @@ private fun AudioConverterApp() {
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    androidx.compose.material3.Icon(Icons.Default.MusicNote, contentDescription = null)
+                    Icon(Icons.Default.AudioFile, contentDescription = null)
                     Text(
-                        text = "Convert audio files",
+                        text = "Audio conversion studio",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 8.dp)
@@ -102,7 +104,8 @@ private fun AudioConverterApp() {
 
             Button(
                 onClick = { launcher.launch("audio/*") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isBusy
             ) {
                 Text("Choose audio file")
             }
@@ -123,18 +126,21 @@ private fun AudioConverterApp() {
                 value = outputFormat,
                 onValueChange = { outputFormat = it.trim().lowercase() },
                 label = { Text("Output format") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isBusy
             )
 
             Button(
                 onClick = {
-                    val uri = selectedUri
-                    if (uri == null) {
+                    val uri = selectedUri ?: run {
                         status = "Please choose an audio file first."
                         return@Button
                     }
 
+                    if (isBusy) return@Button
+
                     scope.launch {
+                        isBusy = true
                         status = "Converting..."
                         try {
                             val inputFile = File(context.cacheDir, "input_${System.currentTimeMillis()}.tmp")
@@ -144,37 +150,38 @@ private fun AudioConverterApp() {
                             )
 
                             copyUriToFile(context, uri, inputFile)
+                            val command = buildConversionCommand(inputFile.absolutePath, outputFile.absolutePath, outputFormat)
+                            val session = withContext(Dispatchers.IO) { FFmpegKit.execute(command) }
 
-                            val cmd = buildConversionCommand(inputFile.absolutePath, outputFile.absolutePath, outputFormat)
-                            val rc = withContext(Dispatchers.IO) {
-                                FFmpegKit.execute(cmd)
-                            }
-
-                            if (rc.returnCode.isSuccess) {
+                            if (session.returnCode.isSuccess) {
                                 convertedFilePath = outputFile.absolutePath
-                                status = "Converted successfully: ${outputFile.absolutePath}"
+                                status = "Conversion complete. Output saved to ${outputFile.absolutePath}"
                             } else {
-                                status = "Conversion failed. Return code: ${rc.returnCode.value}"
+                                status = "Conversion failed. Please try a different file or format. Return code: ${session.returnCode.value}"
                             }
                         } catch (e: Exception) {
-                            status = "Error: ${e.message}"
+                            status = "Error: ${e.message ?: "Unknown error"}"
+                        } finally {
+                            isBusy = false
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isBusy
             ) {
-                Text("Convert")
+                Text(if (isBusy) "Converting..." else "Convert")
             }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Status", style = MaterialTheme.typography.titleMedium)
                     Text(status)
                     convertedFilePath?.let {
-                        Text("Output path: $it")
+                        Text("Output: $it")
                     }
                 }
             }
@@ -186,7 +193,8 @@ private fun AudioConverterApp() {
                     convertedFilePath = null
                     status = "Reset complete. Select a new file."
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isBusy
             ) {
                 Text("Reset")
             }
@@ -203,19 +211,22 @@ private fun normalizeExtension(format: String): String = when (format.lowercase(
 }
 
 private fun buildConversionCommand(inputPath: String, outputPath: String, format: String): String {
-    val ext = normalizeExtension(format)
-    return when (ext) {
-        "wav" -> "-y -i $inputPath -vn $outputPath"
-        "aac" -> "-y -i $inputPath -vn -c:a aac $outputPath"
-        "flac" -> "-y -i $inputPath -vn -c:a flac $outputPath"
-        else -> "-y -i $inputPath -vn -c:a libmp3lame -q:a 2 $outputPath"
+    val safeInput = shellQuote(inputPath)
+    val safeOutput = shellQuote(outputPath)
+    return when (normalizeExtension(format)) {
+        "wav" -> "-y -i $safeInput -vn $safeOutput"
+        "aac" -> "-y -i $safeInput -vn -c:a aac $safeOutput"
+        "flac" -> "-y -i $safeInput -vn -c:a flac $safeOutput"
+        else -> "-y -i $safeInput -vn -c:a libmp3lame -q:a 2 $safeOutput"
     }
 }
+
+private fun shellQuote(path: String): String = "'${path.replace("'", "'\\''")}'"
 
 private fun copyUriToFile(context: android.content.Context, uri: Uri, outFile: File) {
     context.contentResolver.openInputStream(uri)?.use { input ->
         FileOutputStream(outFile).use { output ->
             input.copyTo(output)
         }
-    } ?: throw IllegalStateException("Could not open the selected file.")
+    } ?: throw IllegalStateException("Unable to read the selected file.")
 }
