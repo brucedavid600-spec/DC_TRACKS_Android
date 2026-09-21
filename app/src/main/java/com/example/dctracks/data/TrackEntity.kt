@@ -1,28 +1,21 @@
 package com.example.dctracks.data
 
-import androidx.room.Database
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import android.content.Context
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import com.example.dctracks.Track
 
-@Database(entities = [TrackEntity::class], version = 1, exportSchema = false)
-abstract class AppDatabase : RoomDatabase() {
-    abstract fun trackDao(): TrackDao
+@Entity(tableName = "tracks")
+data class TrackEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val type: String,
+    val status: String,
+    val notes: String,
+    val distance: String,
+    val pace: String,
+    val location: String,
+    val date: String
+)
 
-    companion object {
-        @Volatile
-        private var INSTANCE: AppDatabase? = null
-
-        fun getInstance(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "dctracks_db"
-                ).build()
-                INSTANCE = instance
-                instance
-            }
-        }
-    }
-}
+fun TrackEntity.toTrack() = Track(id, title, type, status, notes, distance, pace, location, date)
+fun Track.toEntity() = TrackEntity(id, title, type, status, notes, distance, pace, location, date)

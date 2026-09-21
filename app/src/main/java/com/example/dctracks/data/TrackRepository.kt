@@ -1,19 +1,9 @@
 package com.example.dctracks.data
 
-import androidx.room.Dao
-import androidx.room.Delete
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
+import com.example.dctracks.Track
 
-@Dao
-interface TrackDao {
-    @Query("SELECT * FROM tracks ORDER BY date DESC")
-    suspend fun getAllTracks(): List<TrackEntity>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTrack(track: TrackEntity)
-
-    @Delete
-    suspend fun deleteTrack(track: TrackEntity)
+class TrackRepository(private val dao: TrackDao) {
+    suspend fun getAllTracks(): List<Track> = dao.getAll().map { it.toTrack() }
+    suspend fun insertOrUpdate(track: Track) = dao.save(track.toEntity())
+    suspend fun deleteTrack(track: Track) = dao.delete(track.toEntity())
 }

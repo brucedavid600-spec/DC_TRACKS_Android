@@ -1,42 +1,19 @@
 package com.example.dctracks.data
 
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-import com.example.dctracks.Track
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
 
-@Entity(tableName = "tracks")
-data class TrackEntity(
-    @PrimaryKey val id: String,
-    val title: String,
-    val type: String,
-    val status: String,
-    val notes: String,
-    val distance: String,
-    val pace: String,
-    val location: String,
-    val date: String
-) {
-    fun toDomain(): Track = Track(
-        id = id,
-        title = title,
-        type = type,
-        status = status,
-        notes = notes,
-        distance = distance,
-        pace = pace,
-        location = location,
-        date = date
-    )
+@Dao
+interface TrackDao {
+    @Query("SELECT * FROM tracks ORDER BY id DESC")
+    suspend fun getAll(): List<TrackEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun save(track: TrackEntity)
+
+    @Delete
+    suspend fun delete(track: TrackEntity)
 }
-
-fun Track.toEntity(): TrackEntity = TrackEntity(
-    id = id,
-    title = title,
-    type = type,
-    status = status,
-    notes = notes,
-    distance = distance,
-    pace = pace,
-    location = location,
-    date = date
-)
