@@ -1,51 +1,59 @@
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
-}
+# DC TRACKS Android
 
-android {
-    namespace = "com.example.dctracks"
-    compileSdk = 35
+A modern Android starter app for tracking activities, routes, and progress.
 
-    defaultConfig {
-        applicationId = "com.example.dctracks"
-        minSdk = 24
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
-    }
+## What this app includes
 
-    buildFeatures {
-        compose = true
-    }
+- a dashboard/list of tracks
+- add/edit/delete actions
+- status badges
+- form-based track management
+- Jetpack Compose UI
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
+## Open and run
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-}
+1. Open this repository in Android Studio Ladybug or newer.
+2. Let Gradle sync and install the Android SDK if prompted.
+3. Select an emulator or connected device.
+4. Click Run.
 
-dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
-    implementation(composeBom)
-    androidTestImplementation(composeBom)
+This starter is ready for adding real networking, persistence, geolocation, or analytics features.
 
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.10.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
+## Main app concept
 
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
+DC TRACKS is intended to manage activity entries such as:
+- runs
+- rides
+- hikes
+- route reviews
+- training sessions
 
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-}
+You can expand the app by connecting it to a local database, remote API, or map service.
+
+## Default screen
+
+The initial version includes:
+- a list of sample tracks
+- buttons to edit or delete entries
+- a floating action button to add a new track
+- a form screen for entering track details
+
+## Next enhancements
+
+- save data locally with Room
+- add a search/filter feature
+- add map or GPS support
+- attach photos or notes
+- export/import data
+- connect to Firebase or backend API
+
+## Project structure
+
+- app/src/main/java/com/example/dctracks/MainActivity.kt
+- app/src/main/AndroidManifest.xml
+- app/build.gradle.kts
+
+## Notes
+
+This app is intentionally simple and easy to extend for a real product.
+Software design and screens can be expanded quickly from here.
