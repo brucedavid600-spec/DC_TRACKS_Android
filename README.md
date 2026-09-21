@@ -19,10 +19,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -36,7 +38,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -69,56 +70,104 @@ class MainActivity : ComponentActivity() {
 private fun DCTracksApp() {
     val tracks = remember {
         mutableStateListOf(
-            Track("1", "City Sprint", "Running", "In Progress", "Warm-up lap before the main route.", "3.4 mi"),
-            Track("2", "Forest Loop", "Hiking", "Planned", "Trail review and scenic pass.", "5.1 mi"),
-            Track("3", "Night Ride", "Cycling", "Completed", "Strong pace and steady cadence.", "12.7 mi"),
-            Track("4", "Harbor Walk", "Walking", "Completed", "Recovery walk after training.", "2.2 mi"),
-            Track("5", "Hill Repeats", "Running", "Planned", "Speed blocks and recovery intervals.", "4.0 mi")
+            Track(
+                id = "1",
+                title = "City Sprint",
+                type = "Running",
+                status = "In Progress",
+                notes = "Warm-up lap before the main route.",
+                distance = "3.4 mi",
+                pace = "7:12 /mi",
+                location = "Downtown Loop",
+                date = "Today"
+            ),
+            Track(
+                id = "2",
+                title = "Forest Loop",
+                type = "Hiking",
+                status = "Planned",
+                notes = "Trail review and scenic pass.",
+                distance = "5.1 mi",
+                pace = "24:36 /mi",
+                location = "North Ridge",
+                date = "Tomorrow"
+            ),
+            Track(
+                id = "3",
+                title = "Night Ride",
+                type = "Cycling",
+                status = "Completed",
+                notes = "Strong pace and steady cadence.",
+                distance = "12.7 mi",
+                pace = "16.5 mph",
+                location = "River Trail",
+                date = "Yesterday"
+            ),
+            Track(
+                id = "4",
+                title = "Harbor Walk",
+                type = "Walking",
+                status = "Completed",
+                notes = "Recovery walk after training.",
+                distance = "2.2 mi",
+                pace = "18:12 /mi",
+                location = "Harbor Promenade",
+                date = "2 days ago"
+            )
         )
     }
 
-    var activeScreen by remember { mutableStateOf<AppScreen>(AppScreen.Home) }
+    var activeScreen by remember { mutableStateOf<Screen>(Screen.Home) }
     var query by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf(TrackFilter.All) }
+    var selectedTab by remember { mutableStateOf(Filter.All) }
 
-    val visibleTracks = remember(tracks, query, selectedTab) {
+    val filteredTracks = remember(tracks, query, selectedTab) {
         tracks.filter { track ->
-            val matchesFilter = when (selectedTab) {
-                TrackFilter.All -> true
-                TrackFilter.Planned -> track.status == "Planned"
-                TrackFilter.InProgress -> track.status == "In Progress"
-                TrackFilter.Completed -> track.status == "Completed"
+            val matchesTab = when (selectedTab) {
+                Filter.All -> true
+                Filter.Planned -> track.status == "Planned"
+                Filter.InProgress -> track.status == "In Progress"
+                Filter.Completed -> track.status == "Completed"
             }
-            val matchesQuery = query.isBlank() || track.title.contains(query, ignoreCase = true) ||
-                track.trackType.contains(query, ignoreCase = true)
-            matchesFilter && matchesQuery
+            val matchesQuery = query.isBlank() ||
+                track.title.contains(query, ignoreCase = true) ||
+                track.type.contains(query, ignoreCase = true) ||
+                track.location.contains(query, ignoreCase = true)
+            matchesTab && matchesQuery
         }
     }
 
     when (val screen = activeScreen) {
-        AppScreen.Home -> HomeScreen(
-            tracks = visibleTracks,
+        Screen.Home -> HomeScreen(
+            tracks = filteredTracks,
             query = query,
             selectedTab = selectedTab,
             onQueryChange = { query = it },
             onTabChange = { selectedTab = it },
-            onAddTrack = { activeScreen = AppScreen.Form(null) },
-            onEditTrack = { track -> activeScreen = AppScreen.Form(track) },
-            onDeleteTrack = { track -> tracks.remove(track) }
+            onAddTrack = { activeScreen = Screen.Form(null) },
+            onEditTrack = { track -> activeScreen = Screen.Form(track) },
+            onDeleteTrack = { track -> tracks.remove(track) },
+            onOpenTrack = { track -> activeScreen = Screen.Detail(track) }
         )
 
-        is AppScreen.Form -> TrackFormScreen(
+        is Screen.Form -> TrackFormScreen(
             initialTrack = screen.track,
-            onSave = { updatedTrack ->
+            onSave = { savedTrack ->
                 if (screen.track == null) {
-                    tracks.add(updatedTrack)
+                    tracks.add(savedTrack)
                 } else {
-                    val index = tracks.indexOfFirst { it.id == updatedTrack.id }
-                    if (index >= 0) tracks[index] = updatedTrack
+                    val index = tracks.indexOfFirst { it.id == savedTrack.id }
+                    if (index >= 0) tracks[index] = savedTrack
                 }
-                activeScreen = AppScreen.Home
+                activeScreen = Screen.Home
             },
-            onCancel = { activeScreen = AppScreen.Home }
+            onCancel = { activeScreen = Screen.Home }
+        )
+
+        is Screen.Detail -> TrackDetailScreen(
+            track = screen.track,
+            onBack = { activeScreen = Screen.Home },
+            onEdit = { activeScreen = Screen.Form(screen.track) }
         )
     }
 }
@@ -127,23 +176,20 @@ private fun DCTracksApp() {
 private fun HomeScreen(
     tracks: List<Track>,
     query: String,
-    selectedTab: TrackFilter,
+    selectedTab: Filter,
     onQueryChange: (String) -> Unit,
-    onTabChange: (TrackFilter) -> Unit,
+    onTabChange: (Filter) -> Unit,
     onAddTrack: () -> Unit,
     onEditTrack: (Track) -> Unit,
-    onDeleteTrack: (Track) -> Unit
+    onDeleteTrack: (Track) -> Unit,
+    onOpenTrack: (Track) -> Unit
 ) {
-    val totalTracks = tracks.size
-    val completedCount = tracks.count { it.status == "Completed" }
-    val plannedCount = tracks.count { it.status == "Planned" }
+    val total = tracks.size
+    val completed = tracks.count { it.status == "Completed" }
+    val planned = tracks.count { it.status == "Planned" }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("DC TRACKS") }
-            )
-        },
+        topBar = { TopAppBar(title = { Text("DC TRACKS") }) },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddTrack) {
                 Icon(Icons.Default.Add, contentDescription = "Add track")
@@ -157,11 +203,7 @@ private fun HomeScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SummaryRow(
-                totalTracks = totalTracks,
-                completedCount = completedCount,
-                plannedCount = plannedCount
-            )
+            SummaryRow(total, completed, planned)
 
             OutlinedTextField(
                 value = query,
@@ -171,23 +213,21 @@ private fun HomeScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            TrackFilterTabs(
-                selectedTab = selectedTab,
-                onTabChange = onTabChange
-            )
+            TrackFilterTabs(selectedTab, onTabChange)
 
             if (tracks.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No tracks match your filter.")
+                    Text("No tracks match your search.")
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(tracks, key = { it.id }) { track ->
                         TrackCard(
                             track = track,
+                            onOpen = { onOpenTrack(track) },
                             onEdit = { onEditTrack(track) },
                             onDelete = { onDeleteTrack(track) }
                         )
@@ -199,27 +239,19 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun SummaryRow(
-    totalTracks: Int,
-    completedCount: Int,
-    plannedCount: Int
-) {
+private fun SummaryRow(total: Int, completed: Int, planned: Int) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SummaryCard(title = "Total", value = totalTracks.toString(), icon = Icons.Default.Star)
-        SummaryCard(title = "Done", value = completedCount.toString(), icon = Icons.Default.CheckCircle)
-        SummaryCard(title = "Planned", value = plannedCount.toString(), icon = Icons.Default.PlayArrow)
+        SummaryCard("Total", total.toString(), Icons.Default.Star)
+        SummaryCard("Done", completed.toString(), Icons.Default.CheckCircle)
+        SummaryCard("Planned", planned.toString(), Icons.Default.PlayArrow)
     }
 }
 
 @Composable
-private fun SummaryCard(
-    title: String,
-    value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
-) {
+private fun SummaryCard(title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
     Card(
         modifier = Modifier
             .weight(1f)
@@ -235,7 +267,7 @@ private fun SummaryCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, contentDescription = null)
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(Modifier.width(6.dp))
                 Text(title, style = MaterialTheme.typography.labelMedium)
             }
             Text(
@@ -249,14 +281,11 @@ private fun SummaryCard(
 }
 
 @Composable
-private fun TrackFilterTabs(
-    selectedTab: TrackFilter,
-    onTabChange: (TrackFilter) -> Unit
-) {
-    TabRow(selectedTabIndex = selectedTab.ordinal) {
-        TrackFilter.entries.forEach { tab ->
+private fun TrackFilterTabs(checked: Filter, onTabChange: (Filter) -> Unit) {
+    TabRow(selectedTabIndex = checked.ordinal) {
+        Filter.entries.forEach { tab ->
             Tab(
-                selected = selectedTab == tab,
+                selected = checked == tab,
                 onClick = { onTabChange(tab) },
                 text = { Text(tab.label) }
             )
@@ -267,15 +296,20 @@ private fun TrackFilterTabs(
 @Composable
 private fun TrackCard(
     track: Track,
+    onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -288,18 +322,26 @@ private fun TrackCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = track.trackType,
+                        text = track.type,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
+                StatusBadge(track.status)
+            }
 
-                StatusBadge(status = track.status)
+            Row(
+                modifier = Modifier.padding(top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.LocationOn, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text(track.location)
             }
 
             Text(
-                text = track.distance,
+                text = "${track.distance} • ${track.pace} • ${track.date}",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 10.dp)
             )
@@ -318,6 +360,9 @@ private fun TrackCard(
                     .padding(top = 16.dp),
                 horizontalArrangement = Arrangement.End
             ) {
+                Button(onClick = onOpen) {
+                    Text("Open")
+                }
                 IconButton(onClick = onEdit) {
                     Icon(Icons.Default.Edit, contentDescription = "Edit track")
                 }
@@ -351,11 +396,70 @@ private fun StatusBadge(status: String) {
 }
 
 @Composable
-private fun DCTracksTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme,
-        content = content
-    )
+private fun TrackDetailScreen(
+    track: Track,
+    onBack: () -> Unit,
+    onEdit: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                title = { Text(track.title) }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            StatusBadge(track.status)
+
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    DetailRow("Type", track.type)
+                    DetailRow("Distance", track.distance)
+                    DetailRow("Pace", track.pace)
+                    DetailRow("Location", track.location)
+                    DetailRow("Date", track.date)
+                }
+            }
+
+            Text(
+                text = "Notes",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(text = track.notes.ifBlank { "No notes were added." })
+
+            Button(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+                Text("Edit track")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontWeight = FontWeight.Medium)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -366,12 +470,15 @@ private fun TrackFormScreen(
     onCancel: () -> Unit
 ) {
     var title by remember(initialTrack?.id) { mutableStateOf(initialTrack?.title ?: "") }
-    var trackType by remember(initialTrack?.id) { mutableStateOf(initialTrack?.trackType ?: "") }
+    var type by remember(initialTrack?.id) { mutableStateOf(initialTrack?.type ?: "") }
     var status by remember(initialTrack?.id) { mutableStateOf(initialTrack?.status ?: "Planned") }
     var notes by remember(initialTrack?.id) { mutableStateOf(initialTrack?.notes ?: "") }
     var distance by remember(initialTrack?.id) { mutableStateOf(initialTrack?.distance ?: "0.0 mi") }
+    var pace by remember(initialTrack?.id) { mutableStateOf(initialTrack?.pace ?: "0:00 /mi") }
+    var location by remember(initialTrack?.id) { mutableStateOf(initialTrack?.location ?: "") }
+    var date by remember(initialTrack?.id) { mutableStateOf(initialTrack?.date ?: "Today") }
 
-    val isValid = title.isNotBlank() && trackType.isNotBlank()
+    val isValid = title.isNotBlank() && type.isNotBlank()
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(if (initialTrack == null) "New track" else "Edit track") }) }
@@ -383,53 +490,32 @@ private fun TrackFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Title") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = trackType,
-                onValueChange = { trackType = it },
-                label = { Text("Type") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = status,
-                onValueChange = { status = it },
-                label = { Text("Status") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = distance,
-                onValueChange = { distance = it },
-                label = { Text("Distance") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                label = { Text("Notes") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = type, onValueChange = { type = it }, label = { Text("Type") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = status, onValueChange = { status = it }, label = { Text("Status") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = distance, onValueChange = { distance = it }, label = { Text("Distance") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = pace, onValueChange = { pace = it }, label = { Text("Pace") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = location, onValueChange = { location = it }, label = { Text("Location") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = date, onValueChange = { date = it }, label = { Text("Date") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                Button(onClick = onCancel) {
-                    Text("Cancel")
-                }
+                Button(onClick = onCancel) { Text("Cancel") }
                 Button(
                     onClick = {
                         val saved = Track(
                             id = initialTrack?.id ?: UUID.randomUUID().toString(),
                             title = title.trim(),
-                            trackType = trackType.trim(),
+                            type = type.trim(),
                             status = status.trim().ifBlank { "Planned" },
                             notes = notes.trim(),
-                            distance = distance.trim().ifBlank { "0.0 mi" }
+                            distance = distance.trim().ifBlank { "0.0 mi" },
+                            pace = pace.trim().ifBlank { "0:00 /mi" },
+                            location = location.trim().ifBlank { "Unknown" },
+                            date = date.trim().ifBlank { "Today" }
                         )
                         onSave(saved)
                     },
@@ -443,23 +529,33 @@ private fun TrackFormScreen(
     }
 }
 
+@Composable
+private fun DCTracksTheme(content: @Composable () -> Unit) {
+    MaterialTheme(content = content)
+}
+
 data class Track(
     val id: String,
     val title: String,
-    val trackType: String,
+    val type: String,
     val status: String,
     val notes: String,
-    val distance: String
+    val distance: String,
+    val pace: String,
+    val location: String,
+    val date: String
 )
 
-private enum class TrackFilter(val label: String) {
+enum class Filter(val label: String) {
     All("All"),
     Planned("Planned"),
     InProgress("In Progress"),
     Completed("Completed")
 }
 
-private sealed class AppScreen {
-    data object Home : AppScreen()
-    data class Form(val track: Track?) : AppScreen()
+private sealed class Screen {
+    data object Home : Screen()
+    data class Form(val track: Track?) : Screen()
+    data class Detail(val track: Track) : Screen()
 }
+
