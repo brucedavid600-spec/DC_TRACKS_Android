@@ -6,15 +6,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,12 +34,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +51,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,6 +68,7 @@ class MainActivity : ComponentActivity() {
 private fun AudioConverterApp() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val conversionHistory = remember { mutableStateListOf<ConversionRecord>() }
 
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
     var outputFormat by remember { mutableStateOf("mp3") }
@@ -73,7 +83,7 @@ private fun AudioConverterApp() {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Audio Converter") }) }
+        topBar = { TopAppBar(title = { Text("Audio Converter Pro") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -92,9 +102,9 @@ private fun AudioConverterApp() {
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.AudioFile, contentDescription = null)
+                    Icon(Icons.Default.MusicNote, contentDescription = null)
                     Text(
-                        text = "Audio conversion studio",
+                        text = "Clean audio conversion",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 8.dp)
@@ -113,7 +123,8 @@ private fun AudioConverterApp() {
             if (selectedUri != null) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text("Selected file", style = MaterialTheme.typography.titleMedium)
@@ -122,13 +133,23 @@ private fun AudioConverterApp() {
                 }
             }
 
-            OutlinedTextField(
-                value = outputFormat,
-                onValueChange = { outputFormat = it.trim().lowercase() },
-                label = { Text("Output format") },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isBusy
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = outputFormat,
+                    onValueChange = { outputFormat = it.trim().lowercase() },
+                    label = { Text("Output format") },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isBusy
+                )
+
+                OutlinedTextField(
+                    value = "128 kbps",
+                    onValueChange = {},
+                    label = { Text("Quality") },
+                    modifier = Modifier.weight(1f),
+                    enabled = false
+                )
+            }
 
             Button(
                 onClick = {
@@ -141,26 +162,32 @@ private fun AudioConverterApp() {
 
                     scope.launch {
                         isBusy = true
-                        status = "Converting..."
+                        status = "Converting... please wait."
                         try {
                             val inputFile = File(context.cacheDir, "input_${System.currentTimeMillis()}.tmp")
-                            val outputFile = File(
-                                context.cacheDir,
-                                "converted_${System.currentTimeMillis()}.${normalizeExtension(outputFormat)}"
-                            )
-
+                            val outFile = File(context.cacheDir, "converted_${System.currentTimeMillis()}.${normalizeExtension(outputFormat)}")
                             copyUriToFile(context, uri, inputFile)
-                            val command = buildConversionCommand(inputFile.absolutePath, outputFile.absolutePath, outputFormat)
-                            val session = withContext(Dispatchers.IO) { FFmpegKit.execute(command) }
 
-                            if (session.returnCode.isSuccess) {
-                                convertedFilePath = outputFile.absolutePath
-                                status = "Conversion complete. Output saved to ${outputFile.absolutePath}"
+                            val command = buildConversionCommand(inputFile.absolutePath, outFile.absolutePath, outputFormat)
+                            val result = withContext(Dispatchers.IO) {
+                                FFmpegKit.execute(command)
+                            }
+
+                            if (result.returnCode.isSuccess) {
+                                val record = ConversionRecord(
+                                    id = UUID.randomUUID().toString(),
+                                    name = outFile.name,
+                                    path = outFile.absolutePath,
+                                    format = normalizeExtension(outputFormat)
+                                )
+                                conversionHistory.add(record)
+                                convertedFilePath = outFile.absolutePath
+                                status = "Converted successfully: ${outFile.absolutePath}"
                             } else {
-                                status = "Conversion failed. Please try a different file or format. Return code: ${session.returnCode.value}"
+                                status = "Conversion failed. Please try another format or file. RC=${result.returnCode.value}"
                             }
                         } catch (e: Exception) {
-                            status = "Error: ${e.message ?: "Unknown error"}"
+                            status = "Error: ${e.message ?: "Unknown conversion error"}"
                         } finally {
                             isBusy = false
                         }
@@ -180,8 +207,42 @@ private fun AudioConverterApp() {
                 Column(Modifier.padding(16.dp)) {
                     Text("Status", style = MaterialTheme.typography.titleMedium)
                     Text(status)
-                    convertedFilePath?.let {
-                        Text("Output: $it")
+                    convertedFilePath?.let { Text("Output: $it") }
+                }
+            }
+
+            Text("Recent conversions", style = MaterialTheme.typography.titleMedium)
+            if (conversionHistory.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No conversions yet")
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(conversionHistory) { record ->
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(record.name, style = MaterialTheme.typography.titleSmall)
+                                    Text(record.format.uppercase(), style = MaterialTheme.typography.bodySmall)
+                                }
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A))
+                            }
+                        }
                     }
                 }
             }
@@ -230,3 +291,10 @@ private fun copyUriToFile(context: android.content.Context, uri: Uri, outFile: F
         }
     } ?: throw IllegalStateException("Unable to read the selected file.")
 }
+
+data class ConversionRecord(
+    val id: String,
+    val name: String,
+    val path: String,
+    val format: String
+)
