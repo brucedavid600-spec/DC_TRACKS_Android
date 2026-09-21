@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -72,6 +71,7 @@ private fun AudioConverterApp() {
 
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
     var outputFormat by remember { mutableStateOf("mp3") }
+    var quality by remember { mutableStateOf("128 kbps") }
     var status by remember { mutableStateOf("Select an audio file to convert.") }
     var convertedFilePath by remember { mutableStateOf<String?>(null) }
     var isBusy by remember { mutableStateOf(false) }
@@ -104,7 +104,7 @@ private fun AudioConverterApp() {
                 ) {
                     Icon(Icons.Default.MusicNote, contentDescription = null)
                     Text(
-                        text = "Clean audio conversion",
+                        text = "Audio conversion studio",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 8.dp)
@@ -143,11 +143,11 @@ private fun AudioConverterApp() {
                 )
 
                 OutlinedTextField(
-                    value = "128 kbps",
-                    onValueChange = {},
+                    value = quality,
+                    onValueChange = { quality = it },
                     label = { Text("Quality") },
                     modifier = Modifier.weight(1f),
-                    enabled = false
+                    enabled = !isBusy
                 )
             }
 
@@ -165,26 +165,28 @@ private fun AudioConverterApp() {
                         status = "Converting... please wait."
                         try {
                             val inputFile = File(context.cacheDir, "input_${System.currentTimeMillis()}.tmp")
-                            val outFile = File(context.cacheDir, "converted_${System.currentTimeMillis()}.${normalizeExtension(outputFormat)}")
+                            val outFile = File(
+                                context.cacheDir,
+                                "converted_${System.currentTimeMillis()}.${normalizeExtension(outputFormat)}"
+                            )
                             copyUriToFile(context, uri, inputFile)
 
-                            val command = buildConversionCommand(inputFile.absolutePath, outFile.absolutePath, outputFormat)
-                            val result = withContext(Dispatchers.IO) {
-                                FFmpegKit.execute(command)
-                            }
+                            val command = buildConversionCommand(inputFile.absolutePath, outFile.absolutePath, outputFormat, quality)
+                            val result = withContext(Dispatchers.IO) { FFmpegKit.execute(command) }
 
                             if (result.returnCode.isSuccess) {
                                 val record = ConversionRecord(
                                     id = UUID.randomUUID().toString(),
                                     name = outFile.name,
                                     path = outFile.absolutePath,
-                                    format = normalizeExtension(outputFormat)
+                                    format = normalizeExtension(outputFormat),
+                                    quality = quality
                                 )
                                 conversionHistory.add(record)
                                 convertedFilePath = outFile.absolutePath
                                 status = "Converted successfully: ${outFile.absolutePath}"
                             } else {
-                                status = "Conversion failed. Please try another format or file. RC=${result.returnCode.value}"
+                                status = "Conversion failed. Please try another format or file. Return code: ${result.returnCode.value}"
                             }
                         } catch (e: Exception) {
                             status = "Error: ${e.message ?: "Unknown conversion error"}"
@@ -238,7 +240,7 @@ private fun AudioConverterApp() {
                             ) {
                                 Column {
                                     Text(record.name, style = MaterialTheme.typography.titleSmall)
-                                    Text(record.format.uppercase(), style = MaterialTheme.typography.bodySmall)
+                                    Text("${record.format.uppercase()} • ${record.quality}", style = MaterialTheme.typography.bodySmall)
                                 }
                                 Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A))
                             }
@@ -251,6 +253,7 @@ private fun AudioConverterApp() {
                 onClick = {
                     selectedUri = null
                     outputFormat = "mp3"
+                    quality = "128 kbps"
                     convertedFilePath = null
                     status = "Reset complete. Select a new file."
                 },
@@ -271,14 +274,15 @@ private fun normalizeExtension(format: String): String = when (format.lowercase(
     else -> "mp3"
 }
 
-private fun buildConversionCommand(inputPath: String, outputPath: String, format: String): String {
+private fun buildConversionCommand(inputPath: String, outputPath: String, format: String, quality: String): String {
     val safeInput = shellQuote(inputPath)
     val safeOutput = shellQuote(outputPath)
+    val bitrate = quality.replace(" kbps", "").trim()
     return when (normalizeExtension(format)) {
         "wav" -> "-y -i $safeInput -vn $safeOutput"
-        "aac" -> "-y -i $safeInput -vn -c:a aac $safeOutput"
+        "aac" -> "-y -i $safeInput -vn -c:a aac -b:a ${bitrate}k $safeOutput"
         "flac" -> "-y -i $safeInput -vn -c:a flac $safeOutput"
-        else -> "-y -i $safeInput -vn -c:a libmp3lame -q:a 2 $safeOutput"
+        else -> "-y -i $safeInput -vn -c:a libmp3lame -b:a ${bitrate}k $safeOutput"
     }
 }
 
@@ -296,5 +300,6 @@ data class ConversionRecord(
     val id: String,
     val name: String,
     val path: String,
-    val format: String
+    val format: String,
+    val quality: String
 )
